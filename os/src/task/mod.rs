@@ -17,6 +17,9 @@ mod task;
 use crate::config::MAX_APP_NUM;
 use crate::loader::{get_num_app, init_app_cx};
 use crate::sync::UPSafeCell;
+use crate::syscall::process::TaskInfo;
+use crate::timer::get_time_ms;
+use alloc::vec::Vec;
 use lazy_static::*;
 use switch::__switch;
 pub use task::{TaskControlBlock, TaskStatus};
@@ -54,6 +57,8 @@ lazy_static! {
         let mut tasks = [TaskControlBlock {
             task_cx: TaskContext::zero_init(),
             task_status: TaskStatus::UnInit,
+            syscall_time_record: [0; crate::config::MAX_SYSCALL_NUM],
+            start_time: 0,
         }; MAX_APP_NUM];
         for (i, task) in tasks.iter_mut().enumerate() {
             task.task_cx = TaskContext::goto_restore(init_app_cx(i));
@@ -135,6 +140,35 @@ impl TaskManager {
             panic!("All applications completed!");
         }
     }
+
+    /// update task block info
+    pub fn update_syscall_record_info(&self, syscall_id: usize) {
+        let mut inner = self.inner.exclusive_access();
+        let current_task_id = inner.current_task;
+        inner.tasks[current_task_id].syscall_time_record[syscall_id] += 1;
+        drop(inner);
+    }
+
+    /// get current task info
+    pub fn get_current_task_info(&self) -> TaskInfo {
+        let inner = self.inner.exclusive_access();
+        let current_task_info = inner.tasks[inner.current_task];
+
+        let mut syscall_times: [u32; 500] = [0; 500];
+        syscall_times.copy_from_slice(
+            &current_task_info
+                .syscall_time_record
+                .iter()
+                .map(|v| *v as u32)
+                .collect::<Vec<u32>>()[..500],
+        );
+
+        TaskInfo {
+            status: TaskStatus::Running,
+            syscall_times: syscall_times,
+            time: get_time_ms() - current_task_info.start_time,
+        }
+    }
 }
 
 /// Run the first task in task list.
@@ -168,4 +202,14 @@ pub fn suspend_current_and_run_next() {
 pub fn exit_current_and_run_next() {
     mark_current_exited();
     run_next_task();
+}
+
+/// update task block info
+pub fn update_syscall_record_info(syscall_id: usize) {
+    TASK_MANAGER.update_syscall_record_info(syscall_id);
+}
+
+/// get current task info
+pub fn get_current_task_info() -> TaskInfo {
+    TASK_MANAGER.get_current_task_info()
 }

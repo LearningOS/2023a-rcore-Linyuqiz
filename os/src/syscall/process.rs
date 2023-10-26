@@ -1,14 +1,20 @@
 //! Process management syscalls
 use crate::{
     config::MAX_SYSCALL_NUM,
-    task::{exit_current_and_run_next, suspend_current_and_run_next, TaskStatus},
+    task::{
+        exit_current_and_run_next, get_current_task_info, suspend_current_and_run_next,
+        update_syscall_record_info, TaskStatus,
+    },
     timer::get_time_us,
 };
 
+/// 描述时间值的结构体
 #[repr(C)]
 #[derive(Debug)]
 pub struct TimeVal {
+    /// 秒数
     pub sec: usize,
+    /// 微秒数
     pub usec: usize,
 }
 
@@ -16,16 +22,18 @@ pub struct TimeVal {
 #[allow(dead_code)]
 pub struct TaskInfo {
     /// Task status in it's life cycle
-    status: TaskStatus,
+    pub(crate) status: TaskStatus,
     /// The numbers of syscall called by task
-    syscall_times: [u32; MAX_SYSCALL_NUM],
+    pub syscall_times: [u32; MAX_SYSCALL_NUM],
     /// Total running time of task
-    time: usize,
+    pub time: usize,
 }
 
 /// task exits and submit an exit code
 pub fn sys_exit(exit_code: i32) -> ! {
     trace!("[kernel] Application exited with code {}", exit_code);
+    update_syscall_record_info(crate::syscall::SYSCALL_EXIT);
+
     exit_current_and_run_next();
     panic!("Unreachable in sys_exit!");
 }
@@ -33,6 +41,8 @@ pub fn sys_exit(exit_code: i32) -> ! {
 /// current task gives up resources for other tasks
 pub fn sys_yield() -> isize {
     trace!("kernel: sys_yield");
+    update_syscall_record_info(crate::syscall::SYSCALL_YIELD);
+
     suspend_current_and_run_next();
     0
 }
@@ -40,6 +50,8 @@ pub fn sys_yield() -> isize {
 /// get time with second and microsecond
 pub fn sys_get_time(ts: *mut TimeVal, _tz: usize) -> isize {
     trace!("kernel: sys_get_time");
+    update_syscall_record_info(crate::syscall::SYSCALL_GET_TIME);
+
     let us = get_time_us();
     unsafe {
         *ts = TimeVal {
@@ -53,15 +65,11 @@ pub fn sys_get_time(ts: *mut TimeVal, _tz: usize) -> isize {
 /// YOUR JOB: Finish sys_task_info to pass testcases
 pub fn sys_task_info(ti: *mut TaskInfo) -> isize {
     trace!("kernel: sys_task_info");
-    let mut syscall_times_vec = [0; MAX_SYSCALL_NUM];
-    syscall_times_vec[super::SYSCALL_TASK_INFO] = 1;
+    update_syscall_record_info(crate::syscall::SYSCALL_TASK_INFO);
+
     unsafe {
-        *ti = TaskInfo {
-            status: TaskStatus::Running,
-            syscall_times: syscall_times_vec,
-            time: 1,
-        };
-        return 0;
+        *ti = get_current_task_info();
     }
-    // -1
+
+    return 0;
 }
