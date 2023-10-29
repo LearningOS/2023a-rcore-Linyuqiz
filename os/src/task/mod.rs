@@ -84,7 +84,10 @@ impl TaskManager {
         let mut inner = self.inner.exclusive_access();
         let next_task = &mut inner.tasks[0];
         next_task.task_status = TaskStatus::Running;
+
+        next_task.is_sunning = true;
         next_task.task_info.time = get_time_ms();
+
         let next_task_cx_ptr = &next_task.task_cx as *const TaskContext;
         drop(inner);
         let mut _unused = TaskContext::zero_init();
@@ -149,7 +152,7 @@ impl TaskManager {
         TaskInfo {
             status: TaskStatus::Running,
             syscall_times: task_info.syscall_times,
-            time: get_time_ms() - task_info.time,
+            time: get_time_ms(),
         }
     }
 
@@ -224,6 +227,13 @@ impl TaskManager {
         if let Some(next) = self.find_next_task() {
             let mut inner = self.inner.exclusive_access();
             let current = inner.current_task;
+            let task = &mut inner.tasks[current];
+
+            if !task.is_sunning {
+                task.is_sunning = true;
+                task.task_info.time = get_time_ms();
+            }
+
             inner.tasks[next].task_status = TaskStatus::Running;
             inner.current_task = next;
             let current_task_cx_ptr = &mut inner.tasks[current].task_cx as *mut TaskContext;

@@ -32,6 +32,9 @@ pub struct TaskControlBlock {
 
     /// TaskInfo
     pub task_info: TaskInfo,
+
+    /// is running
+    pub is_sunning: bool,
 }
 
 impl TaskControlBlock {
@@ -72,6 +75,7 @@ impl TaskControlBlock {
                 syscall_times: [0; crate::config::MAX_SYSCALL_NUM],
                 time: 0,
             },
+            is_sunning: false,
         };
         // prepare TrapContext in user space
         let trap_cx = task_control_block.get_trap_cx();
