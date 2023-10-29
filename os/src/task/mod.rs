@@ -14,6 +14,8 @@ mod switch;
 #[allow(clippy::module_inception)]
 mod task;
 
+use crate::mm::{address::VPNRange, VirtPageNum};
+
 use crate::loader::{get_app_data, get_num_app};
 use crate::mm::{MapPermission, VirtAddr};
 use crate::sync::UPSafeCell;
@@ -159,8 +161,22 @@ impl TaskManager {
         let end_address = VirtAddr::from(_start + _len);
         let perssion = MapPermission::from_bits((_port as u8) << 1).unwrap() | MapPermission::U;
 
+        for vpn in VPNRange::new(VirtPageNum::from(start_address), end_address.ceil()) {
+            if let Some(pte) = task.memory_set.translate(vpn) {
+                if pte.is_valid() {
+                    return -1;
+                }
+            }
+        }
+
         task.memory_set
             .insert_framed_area(start_address, end_address, perssion);
+
+        for vpn in VPNRange::new(VirtPageNum::from(start_address), end_address.ceil()) {
+            if let None = task.memory_set.translate(vpn) {
+                return -1;
+            }
+        }
 
         0
     }
@@ -173,6 +189,19 @@ impl TaskManager {
 
         let start_address = VirtAddr::from(_start);
         let end_address = VirtAddr::from(_start + _len);
+
+        for vpn in VPNRange::new(VirtPageNum::from(start_address), end_address.ceil()) {
+            match task.memory_set.translate(vpn) {
+                Some(pte) => {
+                    if pte.is_valid() {
+                        return -1;
+                    }
+                }
+                None => {
+                    return -1;
+                }
+            }
+        }
 
         task.memory_set
             .delete_framed_area(start_address, end_address);
