@@ -63,6 +63,17 @@ impl MemorySet {
             None,
         );
     }
+    /// Assume that no conflicts.
+    pub fn delete_framed_area(&mut self, start_va: VirtAddr, end_va: VirtAddr) {
+        self.areas
+            .iter_mut()
+            .filter(|a| {
+                a.vpn_range.get_start() == start_va.into() && a.vpn_range.get_end() == end_va.into()
+            })
+            .next()
+            .unwrap()
+            .unmap(&mut self.page_table)
+    }
     fn push(&mut self, mut map_area: MapArea, data: Option<&[u8]>) {
         map_area.map(&mut self.page_table);
         if let Some(data) = data {

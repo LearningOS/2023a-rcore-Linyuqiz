@@ -15,7 +15,10 @@ mod switch;
 mod task;
 
 use crate::loader::{get_app_data, get_num_app};
+use crate::mm::{MapPermission, VirtAddr};
 use crate::sync::UPSafeCell;
+use crate::syscall::process::TaskInfo;
+use crate::timer::get_time_ms;
 use crate::trap::TrapContext;
 use alloc::vec::Vec;
 use lazy_static::*;
@@ -126,6 +129,57 @@ impl TaskManager {
         inner.tasks[inner.current_task].get_trap_cx()
     }
 
+    /// Get the current 'Running' task's trap contexts.
+    fn update_task_info(&self, syscall_id: usize) {
+        let mut inner = self.inner.exclusive_access();
+        let current = inner.current_task;
+        inner.tasks[current].task_info.syscall_times[syscall_id] += 1;
+    }
+
+    /// Get the current 'Running' task's trap contexts.
+    fn get_current_task_info(&self) -> TaskInfo {
+        let inner = self.inner.exclusive_access();
+        let current = inner.current_task;
+        let task_info = inner.tasks[current].task_info;
+
+        TaskInfo {
+            status: TaskStatus::Running,
+            syscall_times: task_info.syscall_times,
+            time: get_time_ms() - task_info.time,
+        }
+    }
+
+    /// Change the current 'Running' task's program break
+    pub fn mmap(&self, _start: usize, _len: usize, _port: usize) -> isize {
+        let mut inner = self.inner.exclusive_access();
+        let current = inner.current_task;
+        let task = &mut inner.tasks[current];
+
+        let start_address = VirtAddr::from(_start);
+        let end_address = VirtAddr::from(_start + _len);
+        let perssion = MapPermission::from_bits((_port as u8) << 1).unwrap() | MapPermission::U;
+
+        task.memory_set
+            .insert_framed_area(start_address, end_address, perssion);
+
+        0
+    }
+
+    /// Change the current 'Running' task's program break
+    pub fn munmap(&self, _start: usize, _len: usize) -> isize {
+        let mut inner = self.inner.exclusive_access();
+        let current = inner.current_task;
+        let task = &mut inner.tasks[current];
+
+        let start_address = VirtAddr::from(_start);
+        let end_address = VirtAddr::from(_start + _len);
+
+        task.memory_set
+            .delete_framed_area(start_address, end_address);
+
+        0
+    }
+
     /// Change the current 'Running' task's program break
     pub fn change_current_program_brk(&self, size: i32) -> Option<usize> {
         let mut inner = self.inner.exclusive_access();
@@ -201,4 +255,24 @@ pub fn current_trap_cx() -> &'static mut TrapContext {
 /// Change the current 'Running' task's program break
 pub fn change_program_brk(size: i32) -> Option<usize> {
     TASK_MANAGER.change_current_program_brk(size)
+}
+
+/// Change the current 'Running' task's program break
+pub fn update_task_info(syscall_id: usize) {
+    TASK_MANAGER.update_task_info(syscall_id)
+}
+
+/// Change the current 'Running' task's program break
+pub fn get_current_task_info() -> TaskInfo {
+    TASK_MANAGER.get_current_task_info()
+}
+
+/// Change the current 'Running' task's program break
+pub fn mmap(_start: usize, _len: usize, _port: usize) -> isize {
+    TASK_MANAGER.mmap(_start, _len, _port)
+}
+
+/// Change the current 'Running' task's program break
+pub fn munmap(_start: usize, _len: usize) -> isize {
+    TASK_MANAGER.munmap(_start, _len)
 }
