@@ -198,7 +198,7 @@ impl TaskManager {
         for vpn in VPNRange::new(VirtPageNum::from(start_address), end_address.ceil()) {
             match task.memory_set.translate(vpn) {
                 Some(pte) => {
-                    if pte.is_valid() {
+                    if !pte.is_valid() {
                         return -1;
                     }
                 }
