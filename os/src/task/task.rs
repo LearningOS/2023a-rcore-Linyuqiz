@@ -2,7 +2,7 @@
 use super::TaskContext;
 use super::{kstack_alloc, pid_alloc, KernelStack, PidHandle};
 use crate::config::TRAP_CONTEXT_BASE;
-use crate::mm::{MemorySet, PhysPageNum, VirtAddr, KERNEL_SPACE};
+use crate::mm::{MapPermission, MemorySet, PhysPageNum, VirtAddr, VirtPageNum, KERNEL_SPACE};
 use crate::sync::UPSafeCell;
 use crate::trap::{trap_handler, TrapContext};
 use alloc::sync::{Arc, Weak};
@@ -121,6 +121,7 @@ impl TaskControlBlock {
                     exit_code: 0,
                     heap_bottom: user_sp,
                     program_brk: user_sp,
+                    priority: 100,
                 })
             },
         };
@@ -194,6 +195,7 @@ impl TaskControlBlock {
                     exit_code: 0,
                     heap_bottom: parent_inner.heap_bottom,
                     program_brk: parent_inner.program_brk,
+                    priority: 100,
                 })
             },
         });
@@ -238,6 +240,66 @@ impl TaskControlBlock {
         } else {
             None
         }
+    }
+
+    /// Change the current 'Running' task's program break
+    pub fn mmap(&self, _start: usize, _len: usize, _port: usize) -> isize {
+        let start_address = VirtAddr::from(_start);
+        let end_address = VirtAddr::from(_start + _len);
+        let perssion = MapPermission::from_bits((_port as u8) << 1).unwrap() | MapPermission::U;
+
+        let mut task = self.inner_exclusive_access();
+
+        for vpn in
+            crate::mm::address::VPNRange::new(VirtPageNum::from(start_address), end_address.ceil())
+        {
+            if let Some(pte) = task.memory_set.translate(vpn) {
+                if pte.is_valid() {
+                    return -1;
+                }
+            }
+        }
+
+        task.memory_set
+            .insert_framed_area(start_address, end_address, perssion);
+
+        for vpn in
+            crate::mm::address::VPNRange::new(VirtPageNum::from(start_address), end_address.ceil())
+        {
+            if let None = task.memory_set.translate(vpn) {
+                return -1;
+            }
+        }
+
+        0
+    }
+
+    /// Change the current 'Running' task's program break
+    pub fn munmap(&self, _start: usize, _len: usize) -> isize {
+        let mut task = self.inner_exclusive_access();
+
+        let start_address = VirtAddr::from(_start);
+        let end_address = VirtAddr::from(_start + _len);
+
+        for vpn in
+            crate::mm::address::VPNRange::new(VirtPageNum::from(start_address), end_address.ceil())
+        {
+            match task.memory_set.translate(vpn) {
+                Some(pte) => {
+                    if !pte.is_valid() {
+                        return -1;
+                    }
+                }
+                None => {
+                    return -1;
+                }
+            }
+        }
+
+        task.memory_set
+            .delete_framed_area(start_address, end_address);
+
+        0
     }
 }
 

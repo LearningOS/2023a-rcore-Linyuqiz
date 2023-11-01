@@ -1,6 +1,4 @@
 //! Process management syscalls
-use core::hash::Hasher;
-
 use alloc::sync::Arc;
 
 use crate::{
@@ -131,7 +129,7 @@ pub fn sys_get_time(_ts: *mut TimeVal, _tz: usize) -> isize {
     );
 
     let us = get_time_us();
-    *translated_refmut(current_user_token(), ts) = TimeVal {
+    *translated_refmut(current_user_token(), _ts) = TimeVal {
         sec: us / 1_000_000,
         usec: us % 1_000_000,
     };
@@ -161,7 +159,7 @@ pub fn sys_mmap(_start: usize, _len: usize, _port: usize) -> isize {
         return -1;
     }
 
-    mmap(_start, _len, _port)
+    current_task().unwrap().mmap(_start, _len, _port)
 }
 
 /// YOUR JOB: Implement munmap.
@@ -175,7 +173,7 @@ pub fn sys_munmap(_start: usize, _len: usize) -> isize {
         return -1;
     }
 
-    munmap(_start, _len)
+    current_task().unwrap().munmap(_start, _len)
 }
 
 /// change data segment size
@@ -201,15 +199,18 @@ pub fn sys_spawn(_path: *const u8) -> isize {
         let mut parent = current_task.inner_exclusive_access();
 
         let task_controll_block = Arc::new(TaskControlBlock::new(data));
-        let task_controll_block_inner = task_controll_block.inner_exclusive_access();
+        let mut task_controll_block_inner = task_controll_block.inner_exclusive_access();
 
         task_controll_block_inner.parent = Some(Arc::downgrade(&current_task));
-        parent.children.push(task_controll_block_inner.clone());
+        parent.children.push(task_controll_block.clone());
         drop(task_controll_block_inner);
 
+        let pid = task_controll_block.pid.0 as isize;
         add_task(task_controll_block);
 
-        task_controll_block.pid.0 as isize
+        pid
+    } else {
+        -1
     }
 }
 
@@ -221,9 +222,9 @@ pub fn sys_set_priority(_prio: isize) -> isize {
     );
 
     if _prio >= 2 {
-        let mut inner = current_task().unwrap().inner_exclusive_access();
-        inner.priority = _prio as u8;
-        drop(inner);
+        let current_task = current_task().unwrap();
+        let mut task_control_block = current_task.inner_exclusive_access();
+        task_control_block.priority = _prio as u8;
 
         return _prio;
     }
