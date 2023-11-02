@@ -76,6 +76,9 @@ pub struct TaskControlBlockInner {
 
     /// priority
     pub priority: u8,
+
+    /// stride
+    pub stride: usize,
 }
 
 impl TaskControlBlockInner {
@@ -132,6 +135,7 @@ impl TaskControlBlock {
                         time: get_time_ms(),
                     },
                     priority: 100,
+                    stride: 0,
                 })
             },
         };
@@ -211,6 +215,7 @@ impl TaskControlBlock {
                         time: get_time_ms(),
                     },
                     priority: 100,
+                    stride: 0,
                 })
             },
         });
