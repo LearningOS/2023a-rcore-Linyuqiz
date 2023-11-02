@@ -4,6 +4,8 @@ use super::{kstack_alloc, pid_alloc, KernelStack, PidHandle};
 use crate::config::TRAP_CONTEXT_BASE;
 use crate::mm::{MapPermission, MemorySet, PhysPageNum, VirtAddr, VirtPageNum, KERNEL_SPACE};
 use crate::sync::UPSafeCell;
+use crate::syscall::process::TaskInfo;
+use crate::timer::get_time_ms;
 use crate::trap::{trap_handler, TrapContext};
 use alloc::sync::{Arc, Weak};
 use alloc::vec::Vec;
@@ -69,6 +71,9 @@ pub struct TaskControlBlockInner {
     /// Program break
     pub program_brk: usize,
 
+    /// task info
+    pub task_info: TaskInfo,
+
     /// priority
     pub priority: u8,
 }
@@ -121,6 +126,11 @@ impl TaskControlBlock {
                     exit_code: 0,
                     heap_bottom: user_sp,
                     program_brk: user_sp,
+                    task_info: TaskInfo {
+                        status: TaskStatus::Ready,
+                        syscall_times: [0; crate::config::MAX_SYSCALL_NUM],
+                        time: get_time_ms(),
+                    },
                     priority: 100,
                 })
             },
@@ -195,6 +205,11 @@ impl TaskControlBlock {
                     exit_code: 0,
                     heap_bottom: parent_inner.heap_bottom,
                     program_brk: parent_inner.program_brk,
+                    task_info: TaskInfo {
+                        status: TaskStatus::Ready,
+                        syscall_times: [0; crate::config::MAX_SYSCALL_NUM],
+                        time: get_time_ms(),
+                    },
                     priority: 100,
                 })
             },
@@ -239,6 +254,23 @@ impl TaskControlBlock {
             Some(old_break)
         } else {
             None
+        }
+    }
+
+    /// Get the current 'Running' task's trap contexts.
+    pub fn record_task_info(&self, syscall_id: usize) {
+        let mut task = self.inner_exclusive_access();
+        task.task_info.syscall_times[syscall_id] += 1;
+    }
+
+    /// Get the current 'Running' task's trap contexts.
+    pub fn get_current_task_info(&self) -> TaskInfo {
+        let task = self.inner_exclusive_access();
+
+        TaskInfo {
+            status: TaskStatus::Running,
+            syscall_times: task.task_info.syscall_times,
+            time: get_time_ms() - task.task_info.time,
         }
     }
 

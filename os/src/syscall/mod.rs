@@ -39,9 +39,10 @@ const SYSCALL_WAITPID: usize = 260;
 const SYSCALL_SPAWN: usize = 400;
 /// taskinfo syscall
 const SYSCALL_TASK_INFO: usize = 410;
-
-mod fs;
-mod process;
+ 
+pub mod fs;
+pub mod process;
+ 
 
 use fs::*;
 use process::*;
