@@ -78,7 +78,7 @@ pub struct TaskControlBlockInner {
     pub priority: u8,
 
     /// stride
-    pub stride: usize,
+    pub stride: u32,
 }
 
 impl TaskControlBlockInner {
