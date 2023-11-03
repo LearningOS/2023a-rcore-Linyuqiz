@@ -161,7 +161,7 @@ pub fn sys_get_time(_ts: *mut TimeVal, _tz: usize) -> isize {
         usec: us % 1_000_000,
     };
 
-    -1
+    0
 }
 
 /// YOUR JOB: Finish sys_task_info to pass testcases
